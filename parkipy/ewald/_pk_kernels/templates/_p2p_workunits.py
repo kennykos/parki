@@ -339,6 +339,7 @@ def p2p_stokes_comb_gm1d_P2P(
     xi: pk.double,
     xi_squared: pk.double,
     xi_two_inv_sqrt_pi: pk.double,
+    eps2: pk.double,
 ):
     # kernel constants
     num_cells_x: int = num_cells_shape[0]
@@ -407,6 +408,8 @@ def p2p_stokes_comb_gm1d_P2P(
                 # Check if source is within rc of target
                 if d2 > rc_squared:
                     continue
+                # puncture d2 if necessary
+                d2 *= d2 > eps2
                 # kernel dispatch
                 f1: Real3d_fp64 = Real3d_fp64()
                 f2: Real3d_fp64 = Real3d_fp64()
@@ -476,6 +479,7 @@ def p2p_stokes_sl_gm1d_P2P(
     xi: pk.double,
     xi_squared: pk.double,
     xi_two_inv_sqrt_pi: pk.double,
+    eps2: pk.double,
 ):
     # kernel constants
     num_cells_x: int = num_cells_shape[0]
@@ -543,6 +547,8 @@ def p2p_stokes_sl_gm1d_P2P(
                 # Check if source is within rc of target
                 if d2 > rc_squared:
                     continue
+                # puncture
+                d2 *= d2 > eps2
                 # kernel dispatch
                 f1: Real3d_fp64 = Real3d_fp64()
                 # TODO: change to George's method
@@ -616,6 +622,7 @@ def p2p_laplace_gm1d_P2P(
     xi: pk.double,
     xi_squared: pk.double,
     xi_two_inv_sqrt_pi: pk.double,
+    eps2: pk.double,
 ):
     # kernel constants
     num_cells_x: int = num_cells_shape[0]
@@ -674,6 +681,8 @@ def p2p_laplace_gm1d_P2P(
                 # Check if source is within rc of target
                 if d2 > rc_squared:
                     continue
+                # puncture
+                d2 *= d2 > eps2
                 # kernel dispatch
                 f1: Real3d_fp64 = Real3d_fp64()
                 f1.x = forces_list[0][s]
@@ -716,6 +725,7 @@ def p2p_stokes_comb_gm2d_P2P(
     vector_size: int,
     t_counter: pk.View1D[int],
     t_cell_chunks: int,
+    eps2: pk.double,
 ):
 
     # kernel constants
@@ -797,6 +807,8 @@ def p2p_stokes_comb_gm2d_P2P(
                     # Check if source is within rc of target
                     if d2 > rc_squared:
                         continue
+                    # puncture
+                    d2 *= d2 > eps2
                     # kernel dispatch
                     f1: Real3d_fp64 = Real3d_fp64()
                     f2: Real3d_fp64 = Real3d_fp64()
@@ -902,6 +914,7 @@ def p2p_stokes_comb_sm1d_P2P(
     s_cell_chunks: int,
     t_cell_chunks: int,
     t_counter: pk.View1D[int],
+    eps2: pk.double,
 ):
     # kernel constants
     num_cells_x: int = num_cells_shape[0]
@@ -997,6 +1010,8 @@ def p2p_stokes_comb_sm1d_P2P(
             # Check if source is within rc of target
             if d2 > rc_squared:
                 continue
+            # Puncture
+            d2 *= d2 > eps2
             # kernel dispatch
             f1: Real3d_fp64 = Real3d_fp64()
             f2: Real3d_fp64 = Real3d_fp64()
@@ -1112,6 +1127,7 @@ def p2p_stokes_comb_sm2d_P2P(
     s_cell_chunk_threads: int,
     t_cell_chunk_threads: int,
     vector_size: int,
+    eps2: pk.double,
 ):
     # kernel constants
     num_cells_x: int = num_cells_shape[0]
@@ -1225,6 +1241,8 @@ def p2p_stokes_comb_sm2d_P2P(
             # Check if source is within rc of target
             if d2 > rc_squared:
                 return
+            # puncture
+            d2 *= d2 > eps2
             # kernel dispatch
             f1: Real3d_fp64 = Real3d_fp64()
             f2: Real3d_fp64 = Real3d_fp64()

@@ -89,6 +89,11 @@ class TestEwald:
 
         The test data comes from a use case
         where translation invariance initially failed.
+
+        FIX: In version 0.0.1, this test was failing
+        due to a finite-precision singularity in the P2P
+        kernel. This was fixed by adding a puncture radius
+        to EwaldOptions that is passed into the P2P kernel
         """
         if kernel == parkipy.ewald.laplace and periodicity == 1:
             pytest.xfail("not yet implemented")

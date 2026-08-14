@@ -114,20 +114,7 @@ class EwaldKernel:
     def __call__(
         self,
         *args,
-        options=None,
-        cell_size=None,
-        rc=None,
-        p2p_method="GM-1D",
-        p2g_method="HYBRID",
-        g2p_method="TARGET",
-        p2p_threads_x=128,
-        p2p_threads_y=1,
-        p2g_threads=128,
-        g2p_threads=128,
-        buffer_size=None,
-        return_walltime=False,
-        return_params=False,
-        fft_type="R2C",
+        options,
     ):
         """
         Evaluate the kernel using direct evaluation.
@@ -150,16 +137,6 @@ class EwaldKernel:
               for available execution spaces. Input is either a string
               (e.g., 'OpenMP') or a PyKokkos object (e.g., pk.OpenMP).
               Defaults to `pk.get_default_space()`
-            - `cell_size`: Real space cell size. Defaults to `None`.
-            - `p2p_method`: Must be one of `'GM-1D'`, `'GM-2D'`, `'SM-1D'`,
-              or `'SM-2D'`. Defaults to `'GM-1D'`.
-            - `p2g_method`: Must be one of `'BASE'`, `'SOURCE'`, `'GRID'`, `'HYBRID'`.
-              Defaults to `'HYBRID'`.
-            - `g2p_method`: Must be one of `'BASE'`, `'TARGET'`. Defaults to `'TARGET'`.
-            - `mpi_comm`: MPI_COMM_WORLD for distributed execution.
-            - `buffer_size`: Size of MPI buffers. Only relevant if `mpi_comm` is not `None`.
-               Defaults to `2*MPI.Allreduce(N_in, MPI.MAX)`.
-            - `time`: Flag to return `walltime` dictionary.
 
         Returns potential values at `x_out` as an array of shape
         `self.get_shape_out(N_out)`.
@@ -217,24 +194,25 @@ class EwaldKernel:
             kernel=self.kernel,
             box=box,
             tolerance=tol,
-            cell_size=cell_size,
-            rc=rc,
+            cell_size=options.cell_size,
+            rc=options.rc,
             periodicity=periodicity,
             execution_space=execution_space,
-            fft_type=fft_type,
+            fft_type=options.fft_type,
         )
         # algorithm
         walltime = {}
         walltime["p2p"] = p2p(
             device_pre,
-            method=p2p_method,
-            threads_x=p2p_threads_x,
-            threads_y=p2p_threads_y,
+            method=options.p2p_method,
+            threads_x=options.p2p_threads_x,
+            threads_y=options.p2p_threads_y,
+            eps=options.puncture_radius,
         )
         walltime["p2g"] = p2g(
             device_pre,
-            method=p2g_method,
-            threads=p2g_threads,
+            method=options.p2g_method,
+            threads=options.p2g_threads,
         )
         walltime["fft"] = fft(device_pre, options)
         walltime["cnv"] = cnv(device_pre)
@@ -242,8 +220,8 @@ class EwaldKernel:
         device_pre.data.communicate_ghost_grid_cells()
         walltime["g2p"] = g2p(
             device_pre,
-            method=g2p_method,
-            threads=g2p_threads,
+            method=options.g2p_method,
+            threads=options.g2p_threads,
         )
         val = device_pre.near_potential + device_pre.far_potential
         val = val.squeeze()
@@ -253,7 +231,7 @@ class EwaldKernel:
                 f"Kernel function returned wrong shape, found {val.shape}, expected {shape}."
             )
         out = [val]
-        if return_walltime:
+        if options.return_walltime:
             perf = PerfModel(
                 p2p_time=walltime["p2p"],
                 p2g_time=walltime["p2g"],
@@ -270,13 +248,13 @@ class EwaldKernel:
                 fft_dim=device_pre.data.dim_H,
                 ifft_dim=device_pre.dim_out,
                 fft_shape=device_pre.data.Hg.size / device_pre.data.dim_H,
-                cell_size=cell_size,
+                cell_size=options.cell_size,
                 window_P=device_pre.data.opt.window_P,
                 dtype=q_in.dtype,
                 execution_space=execution_space,
             )
             out.append(perf)
-        if return_params:
+        if options.return_params:
             out.append(params)
         out = tuple(out)
         if len(out) == 1:
@@ -329,7 +307,6 @@ class EwaldOptions:
 
     tolerance: float
         Tolerance for Ewald summation. Used to set internal Ewald parameters.
-
     execution_space: `pykokkos.ExecutionSpace` | {'CUDA', 'HIP', 'OPENMP'}
         Device for the Kokkos backend. May be pykokkos execution space type or a string.
 
@@ -388,6 +365,12 @@ class EwaldOptions:
     rc: float | None, optional
         Near field cutoff radius. If ``None``, ``cell_size`` must be provided. The defaults to ``None``.
 
+    puncture_radius: float, optional
+        For each target point, sources within the puncture radius
+        are skipped in the Ewald sum. That if ||x-y+p||<puncture_radius,
+        skip the near-field interaction. This radius accounts for
+        *finite-precision* kernel singularities. The default is 1e-13.
+
     return_walltime: bool, optional
         Flag to return the walltime dict of Ewald stage wall-clock times. If true, the ``parkipy.ewald.PerfHistory``
         object will be the second item returned for a kernel call. The default is ``False``.
@@ -416,6 +399,7 @@ class EwaldOptions:
     g2p_threads: int = 128
     cell_size: int | None = None
     rc: float | None = None
+    puncture_radius: float | None = 1e-13
     return_walltime: bool = False
     return_params: bool = False
 
@@ -601,8 +585,6 @@ def stokes_sl(trg, src, dens, options):
         options.tolerance,
         options.execution_space,
     ]
-    exclude = {"box", "tolerance", "periodicity", "execution_space", "torch_fft"}
-    kwargs = {k: v for k, v in options.__dict__.items() if k not in exclude}
     pot = EwaldKernel(
         name="stokes_sl",
         dim_in=3,
@@ -610,7 +592,7 @@ def stokes_sl(trg, src, dens, options):
         kernel="stokes_sl",
         takes_normals=False,
         description="Stokes single layer potential.",
-    )(*args, options=options, **kwargs)
+    )(*args, options=options)
     return pot
 
 
@@ -718,8 +700,6 @@ def stokes_comb(trg, src, dens, normal, options):
         options.tolerance,
         options.execution_space,
     ]
-    exclude = {"box", "tolerance", "periodicity", "execution_space", "torch_fft"}
-    kwargs = {k: v for k, v in options.__dict__.items() if k not in exclude}
     pot = EwaldKernel(
         name="stokes_comb",
         dim_in=6,
@@ -727,7 +707,7 @@ def stokes_comb(trg, src, dens, normal, options):
         kernel="stokes_comb",
         takes_normals=True,
         description="Stokes single and double layer potential.",
-    )(*args, options=options, **kwargs)
+    )(*args, options=options)
     return pot
 
 
@@ -839,8 +819,6 @@ def laplace(trg, src, charge, options):
         options.tolerance,
         options.execution_space,
     ]
-    exclude = {"box", "tolerance", "periodicity", "execution_space", "torch_fft"}
-    kwargs = {k: v for k, v in options.__dict__.items() if k not in exclude}
     pot = EwaldKernel(
         "laplace",
         1,
@@ -848,5 +826,5 @@ def laplace(trg, src, charge, options):
         "laplace",
         takes_normals=False,
         description="Laplace layer potential.",
-    )(*args, options=options, **kwargs)
+    )(*args, options=options)
     return pot

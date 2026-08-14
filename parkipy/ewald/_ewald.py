@@ -71,6 +71,7 @@ def p2p(
     s_per_thread: int = 32,
     cell_pad: int = 1,
     kernel=None,  # for testing purposes only
+    eps=1e-14,
 ) -> None:
     """
     Perform near-field particle-to-particle (P2P) interaction computation using a
@@ -290,6 +291,7 @@ def p2p(
         "xi": device_pre.data.opt.xi,
         "xi_squared": device_pre.data.opt.xi**2,
         "xi_two_inv_sqrt_pi": device_pre.data.opt.xi * 2 * 0.564189583547756286948079,
+        "eps2": eps * eps,
     }
 
     if device_pre.has_normals:

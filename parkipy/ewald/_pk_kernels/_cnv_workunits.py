@@ -4,6 +4,16 @@
 import pykokkos as pk
 
 
+
+
+
+
+
+
+
+
+
+
 @pk.workunit
 def stokeslet_convolution_kernel_range(
     wid: int,
@@ -182,6 +192,8 @@ def convolution_sum_sl_dl_range(
     D3[i][j][k][l] = H3[i][j][k][l] + H31[i][j][k][l]
 
 
+
+
 @pk.workunit
 def stokeslet_convolution_zero_kernel_range(
     wid: int,
@@ -274,6 +286,8 @@ def stokeslet_convolution_zero_kernel_range(
     H2[i][j][1] = SKK * H2[i][j][1] + k_dot_H_1 * k1
     H3[i][j][0] = SKK * H3[i][j][0] + k_dot_H_0 * k2
     H3[i][j][1] = SKK * H3[i][j][1] + k_dot_H_1 * k2
+
+
 
 
 @pk.workunit
@@ -405,6 +419,8 @@ def stresslet_convolution_kernel_range(
     H21[i][j][k][1] = scaling * vp2_1
     H31[i][j][k][0] = scaling * vp3_0
     H31[i][j][k][1] = scaling * vp3_1
+
+
 
 
 @pk.workunit
@@ -577,6 +593,7 @@ def _k_vector_fp32(M: int, L: pk.float, ups: pk.float, i: int) -> pk.float:
     return k
 
 
+
 @pk.function
 def _kaiser_exact_ft_fp32(
     k1: pk.float, b2: pk.float, w: pk.float, scale: pk.float
@@ -584,6 +601,7 @@ def _kaiser_exact_ft_fp32(
     t: pk.float = pk.sqrt(b2 - k1 * w * w)
     F: pk.float = 2 * w * pk.sinh(t) / t * scale
     return F
+
 
 
 @pk.function
@@ -620,6 +638,7 @@ def stokes_kernel_fp32(
     # this is fine since we overwrite it later on
 
     return scaling
+
 
 
 @pk.workunit
@@ -686,6 +705,7 @@ def laplace_convolution_kernel_fp32(
     pk.parallel_for(pk.TeamThreadRange(team_member, threads), thread_loop)
 
 
+
 @pk.workunit
 def stokeslet_convolution_kernel_fp32(
     team_member: pk.TeamMember,
@@ -749,6 +769,7 @@ def stokeslet_convolution_kernel_fp32(
         H3[i][j][k][1] = scaling * (kk * H3[i][j][k][1] - k_dot_H_im * k2)
 
     pk.parallel_for(pk.TeamThreadRange(team_member, threads), thread_loop)
+
 
 
 @pk.workunit
@@ -855,6 +876,7 @@ def stokeslet_convolution_zero_kernel_fp32(
         H3[i][j][1] = SKK * H3[i][j][1] + k_dot_H_1 * k2
 
     pk.parallel_for(pk.TeamThreadRange(team_member, threads), thread_loop)
+
 
 
 @pk.workunit
@@ -999,6 +1021,7 @@ def stresslet_convolution_kernel_fp32(
         H31[i][j][k][1] = scaling * vp3_1
 
     pk.parallel_for(pk.TeamThreadRange(team_member, threads), thread_loop)
+
 
 
 @pk.workunit
@@ -1761,3 +1784,5 @@ def stresslet_convolution_zero_kernel_fp64(
             H31[i][j][1] += 2 * scaling_H * vp3_0
 
     pk.parallel_for(pk.TeamThreadRange(team_member, threads), thread_loop)
+
+

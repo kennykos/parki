@@ -105,7 +105,6 @@ class TestEwald:
 
         # read in test data.
         data = np.load("tests/data/translation_test.npz")
-        print(data.keys())
         centered = data["centered"]
         offset = data[
             "offset"

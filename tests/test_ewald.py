@@ -2,7 +2,21 @@ import time
 import argparse
 import pytest
 import numpy as np
+import scipy as sp
 import parkipy
+import pykokkos as pk
+
+GPU_AVAILABLE = pk.kokkos_manager.get_gpu_framework() is not None
+
+DEVICE_PARAMS = [
+    "CPU",
+    pytest.param(
+        "GPU",
+        marks=pytest.mark.skipif(
+            not GPU_AVAILABLE, reason="no GPU framework available"
+        ),
+    ),
+]
 
 
 @pytest.mark.parametrize(
@@ -19,21 +33,138 @@ import parkipy
     ],
 )
 @pytest.mark.parametrize("dtype", [np.float32, np.float64])
-@pytest.mark.parametrize("device", ["CPU", "GPU"])
-def test_self_convergence(kernel, periodicity, dtype, device):
+@pytest.mark.parametrize("device", DEVICE_PARAMS)
+class TestEwald:
     """
-    run self convergence test on all supported kernels
-    for all periodic directions in single and double
-    precision arithmetic.
+    Tests for each Ewald sum configuration in the package.
     """
-    if kernel == parkipy.ewald.laplace and periodicity == 1:
-        pytest.xfail("not yet implemented")
-    run_convergence(fun=kernel, periodicity=periodicity, dtype=dtype, device=device)
+
+    def error_rms(self, actual, desired):
+        """
+        relative rms error between `actual` and `desired`.
+
+        both arrays must have shape ``(3, n)`` (vector-valued) or ``(n,)``
+        (scalar-valued).  the pointwise vector norm is computed along axis 0,
+        then the rms is taken over the n points and normalised by the rms norm
+        of `desired`.
+
+        when ``desired`` is identically zero the denominator is zero, so the
+        absolute rms error is returned instead (and a warning is issued).
+
+        returns a dimensionless (or absolute) scalar.
+        """
+        actual = np.asarray(actual)
+        desired = np.asarray(desired)
+        pointwise_err = np.linalg.norm(actual - desired, axis=0)
+        pointwise_ref = np.linalg.norm(desired, axis=0)
+        n = pointwise_err.shape[-1] if pointwise_err.ndim > 0 else 1
+        rms_err = np.sqrt(np.sum(pointwise_err**2) / n)
+        rms_ref = np.sqrt(np.sum(pointwise_ref**2) / n)
+        if rms_ref == 0.0:
+            warnings.warn(
+                "error_rms: desired is zero; returning absolute rms error.",
+                runtimewarning,
+                stacklevel=2,
+            )
+            return rms_err
+        return rms_err / rms_ref
+
+    def test_self_convergence(self, kernel, periodicity, dtype, device):
+        """
+        run self convergence test on all supported kernels
+        for all periodic directions in single and double
+        precision arithmetic.
+        """
+        if kernel == parkipy.ewald.laplace and periodicity == 1:
+            pytest.xfail("not yet implemented")
+        run_convergence(fun=kernel, periodicity=periodicity, dtype=dtype, device=device)
+
+    def test_periodic_translation(self, kernel, periodicity, dtype, device):
+        """
+        Test the translation-invariance of the kernels.
+        First, get a reference solution by placing a shape
+        in the center of the box, and then translate
+        the shape to the periodic edges are confirm the
+        answers agree to some finite precision.
+
+        The test data comes from a use case
+        where translation invariance initially failed.
+        """
+        if kernel == parkipy.ewald.laplace and periodicity == 1:
+            pytest.xfail("not yet implemented")
+
+        am = parkipy.utils.get_array_module(device)
+
+        # TEST PARAMS
+        TOL = 1e-7
+
+        # read in test data.
+        data = np.load("tests/data/translation_test.npz")
+        print(data.keys())
+        centered = data["centered"]
+        offset = data[
+            "offset"
+        ]  # this is offset in the 3P case, need to correct for 1P, ...
+        normals = data["normals"]
+        box = data["box"]
+        density = data["density"]
+
+        translate = (
+            am.array(
+                [box[i] if i < periodicity else box[i] / 2 for i in range(len(box))]
+            )
+            - am.asarray(box) / 2
+        )
+        _offset = centered.copy() + translate.reshape(3, 1) + 1e-14
+        offset -= am.array(
+            [0 if i < periodicity else box[i] / 2 for i in range(len(box))]
+        ).reshape(3, 1)
+        am.testing.assert_allclose(
+            actual=_offset, desired=offset, err_msg="offset array incorrect"
+        )
+        # offset = _offset.copy()
+
+        # shared Ewald options
+        options = parkipy.ewald.EwaldOptions(
+            periodicity=periodicity,
+            box=box,
+            tolerance=1e-6,
+            execution_space=device,
+            cell_size=64,
+        )
+
+        # execute kernel on centered shape
+        args = [centered, centered]
+        match kernel:
+            case parkipy.ewald.stokes_sl:
+                args.append(density)
+            case parkipy.ewald.stokes_comb:
+                args.append(am.vstack([density, density]))
+                args.append(normals)
+            case parkipy.ewald.laplace:
+                args.append(density[0])
+            case _:
+                raise NotImplementedError(f"Test for kernel {kernel} not implemented")
+        centered_potential = kernel(*args, options=options)
+
+        # reset sources/targets to the offset points
+        args[0] = offset  # % am.array(box).reshape(3,1)
+        args[0][:periodicity] = (
+            args[0][:periodicity] % am.array(box).reshape(3, 1)[:periodicity]
+        )
+        args[1] = args[0].copy()
+        offset_potential = kernel(*args, options=options)
+
+        error = self.error_rms(actual=offset_potential, desired=centered_potential)
+        if error > TOL:
+            raise AssertionError(
+                f"error '{error:.2e}' exceeds the tolerance '{TOL:.2e}'."
+            )
 
 
 @pytest.mark.parametrize("p2p_method", ["GM-1D", "GM-2D", "SM-1D", "SM-2D"])
 @pytest.mark.parametrize("dtype", [np.float32, np.float64])
-@pytest.mark.parametrize("device", ["CPU", "GPU"])
+@pytest.mark.parametrize("device", DEVICE_PARAMS)
 def test_p2p_stokes(p2p_method, device, dtype):
     """
     test different p2p methods for the 1-per stokes solver
@@ -43,7 +174,7 @@ def test_p2p_stokes(p2p_method, device, dtype):
 
 @pytest.mark.parametrize("p2g_method", ["BASE", "SOURCE", "GRID", "HYBRID"])
 @pytest.mark.parametrize("dtype", [np.float32, np.float64])
-@pytest.mark.parametrize("device", ["CPU", "GPU"])
+@pytest.mark.parametrize("device", DEVICE_PARAMS)
 def test_p2g_stokes(p2g_method, device, dtype):
     """
     test different p2g method for the 1-per stokes solver
@@ -53,7 +184,7 @@ def test_p2g_stokes(p2g_method, device, dtype):
 
 @pytest.mark.parametrize("g2p_method", ["BASE", "TARGET"])
 @pytest.mark.parametrize("dtype", [np.float32, np.float64])
-@pytest.mark.parametrize("device", ["CPU", "GPU"])
+@pytest.mark.parametrize("device", DEVICE_PARAMS)
 def test_g2p_stokes(g2p_method, device, dtype):
     """
     test different g2p methods for the 1-per stokes solver

@@ -367,9 +367,9 @@ class EwaldOptions:
 
     puncture_radius: float, optional
         For each target point, sources within the puncture radius
-        are skipped in the Ewald sum. That if ||x-y+p||<puncture_radius,
-        skip the near-field interaction. This radius accounts for
-        *finite-precision* kernel singularities. The default is 1e-13.
+        are treated as self interactions (i.e., if ||x-y+p||<puncture_radius).
+        This radius accounts for *finite-precision* kernel singularities
+        when sources and target arrays differ. The default is 1e-13.
 
     return_walltime: bool, optional
         Flag to return the walltime dict of Ewald stage wall-clock times. If true, the ``parkipy.ewald.PerfHistory``

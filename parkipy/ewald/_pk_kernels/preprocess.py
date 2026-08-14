@@ -85,13 +85,9 @@ def format_with_black(fname):
     quirks introduced by template concatenation.
     """
     print(f"  Formatting {fname!r} with black ...")
-    result = subprocess.run(
-        ["black", "-q", fname], capture_output=True, text=True
-    )
+    result = subprocess.run(["black", "-q", fname], capture_output=True, text=True)
     if result.returncode != 0:
-        raise RuntimeError(
-            f"black failed on {fname!r}:\n{result.stderr}"
-        )
+        raise RuntimeError(f"black failed on {fname!r}:\n{result.stderr}")
 
 
 def process_template(template_fname, output_fname):

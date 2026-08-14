@@ -129,6 +129,9 @@ def p2p(
         threads_x = 1
     args_start = time.time()
 
+    if eps is None:
+        eps = 0
+
     # get kernel information
     kernel_flag = None
     has_sl = False

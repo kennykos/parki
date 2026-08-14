@@ -2,9 +2,9 @@ import time
 import argparse
 import pytest
 import numpy as np
-import scipy as sp
 import parkipy
 import pykokkos as pk
+import warnings
 
 GPU_AVAILABLE = pk.kokkos_manager.get_gpu_framework() is not None
 
@@ -63,7 +63,7 @@ class TestEwald:
         if rms_ref == 0.0:
             warnings.warn(
                 "error_rms: desired is zero; returning absolute rms error.",
-                runtimewarning,
+                RuntimeWarning,
                 stacklevel=2,
             )
             return rms_err
